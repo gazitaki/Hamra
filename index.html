@@ -9,6 +9,7 @@
 <link rel="dns-prefetch" href="//firestore.googleapis.com">
 <link rel="dns-prefetch" href="//www.gstatic.com">
 <link rel="preconnect" href="https://i.ibb.co">
+<link rel="preconnect" href="https://wsrv.nl">
 <link rel="preconnect" href="https://firestore.googleapis.com">
 <style>
 
@@ -279,6 +280,7 @@ body{
 </div>
 
 <div class="grid" id="grid"></div>
+<div id="emptyMsg" style="text-align:center;padding:40px;color:var(--gray);display:none;width:100%;">Bu kategoride ürün yok</div>
 
 <div class="cartBar empty" id="cartBar" onclick="openCart()">
   <div class="cartBarLeft">🛍 Sepetim <span class="cartBarCount" id="cartBarCount">0 ürün</span></div>
@@ -322,7 +324,6 @@ body{
   <button class="zoomClose" onclick="closeZoom()">×</button>
   <img id="zoomImg" onclick="event.stopPropagation()">
 </div>
-
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 <script>
@@ -346,16 +347,13 @@ let sending = false;
 function saveCart(){ try{ localStorage.setItem("hamraCart", JSON.stringify(cart)); }catch(e){} }
 function loadCart(){ try{ var s=localStorage.getItem("hamraCart"); if(s) cart=JSON.parse(s); }catch(e){} }
 
-// Yeni Otomatik Resim Boyutlandırıcı Fonksiyon
 function img(url, type = "vitrin"){
   if(!url || url.trim()==="") return "https://via.placeholder.com/300";
-  
   if(url.includes("drive.google.com")){
     let m = url.match(/[-\w]{25,}/);
     let size = type === "vitrin" ? "w400" : "w1000";
     if(m && m[0]) return "https://drive.google.com/thumbnail?id=" + m[0] + "&sz=" + size;
   }
-  
   if(url.startsWith("http://") || url.startsWith("https://")){
      if(type === "vitrin") {
         let cleanUrl = url.replace(/^https?:\/\//, ''); 
@@ -363,45 +361,58 @@ function img(url, type = "vitrin"){
      }
      return url; 
   }
-  
   return "https://via.placeholder.com/300";
 }
 
 function filterCat(cat,el){
-  activeCat=cat;
+  activeCat = cat;
   document.querySelectorAll(".cat").forEach(c=>c.classList.remove("active"));
   el.classList.add("active");
-  renderGrid();
+  
+  let count = 0;
+  document.querySelectorAll(".productCard").forEach(card => {
+    if(card.getAttribute("data-category") === activeCat){
+      card.style.display = "block";
+      count++;
+    } else {
+      card.style.display = "none";
+    }
+  });
+
+  const emptyMsg = document.getElementById("emptyMsg");
+  if(count === 0) emptyMsg.style.display = "block";
+  else emptyMsg.style.display = "none";
 }
 
 function toggleSort(e){
   e.stopPropagation();
-  var panel=document.getElementById("sortPanel");
-  panel.style.display=panel.style.display==="block"?"none":"block";
+  var panel = document.getElementById("sortPanel");
+  panel.style.display = panel.style.display==="block" ? "none" : "block";
 }
 
 function setSort(type,el){
-  activeSort=type;
+  activeSort = type;
   document.querySelectorAll(".sortOption").forEach(o=>o.classList.remove("active"));
   el.classList.add("active");
-  document.getElementById("sortPanel").style.display="none";
+  document.getElementById("sortPanel").style.display = "none";
   renderGrid();
 }
 
 document.addEventListener("click",function(){ document.getElementById("sortPanel").style.display="none"; });
 
 function renderGrid(){
-  let filtered=products.filter(p=>p.category===activeCat);
-  if(activeSort==="az") filtered.sort((a,b)=>a.ad.localeCompare(b.ad,"tr"));
-  else if(activeSort==="asc") filtered.sort((a,b)=>a.fiyat-b.fiyat);
-  else if(activeSort==="desc") filtered.sort((a,b)=>b.fiyat-a.fiyat);
+  let sorted = [...products];
+  if(activeSort==="az") sorted.sort((a,b)=>a.ad.localeCompare(b.ad,"tr"));
+  else if(activeSort==="asc") sorted.sort((a,b)=>a.fiyat-b.fiyat);
+  else if(activeSort==="desc") sorted.sort((a,b)=>b.fiyat-a.fiyat);
 
-  if(!filtered.length){
-    document.getElementById("grid").innerHTML='<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--gray)">Bu kategoride ürün yok</div>';
-    return;
-  }
+  let activeCount = 0;
 
-  document.getElementById("grid").innerHTML=filtered.map(p=>{
+  document.getElementById("grid").innerHTML = sorted.map(p => {
+    const isMatch = p.category === activeCat;
+    if(isMatch) activeCount++;
+    const displayStyle = isMatch ? "block" : "none";
+
     const id=p.id||p.ad;
     const renk1=p.renk1||"";
     const renk2=p.renk2||"";
@@ -411,71 +422,87 @@ function renderGrid(){
       if(renk1){
         const vid=id+"__"+renk1;
         const vqty=cart[vid]?cart[vid].qty:0;
-        varyantHTML+='<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-top:1px solid var(--border);">'
-          +'<span style="font-size:11px;font-weight:700;color:var(--gray);letter-spacing:1px;">'+renk1+'</span>'
-          +'<div class="qtyControl">'
-          +'<div class="qBtn '+(vqty>0?'active':'')+'" onclick="minus(\''+vid+'\')">−</div>'
-          +'<input type="number" min="0" id="qnum-'+vid+'" value="'+vqty+'" class="qNum" onchange="setQty(\''+vid+'\',\''+p.ad+' - '+renk1+'\','+p.fiyat+',\''+( p.resim||"")+'\',\''+p.category+'\',this.value)">'
-          +'<div class="qBtn active" onclick="plus(\''+vid+'\',\''+p.ad+' - '+renk1+'\','+p.fiyat+',\''+(p.resim||"")+'\',\''+p.category+'\')">+</div>'
-          +'</div></div>';
+        varyantHTML+=`<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-top:1px solid var(--border);">
+          <span style="font-size:11px;font-weight:700;color:var(--gray);letter-spacing:1px;">${renk1}</span>
+          <div class="qtyControl">
+          <div class="qBtn ${vqty>0?'active':''}" onclick="minus('${vid}')">−</div>
+          <input type="number" min="0" id="qnum-${vid}" value="${vqty}" class="qNum" onchange="setQty('${vid}','${p.ad} - ${renk1}',${p.fiyat},'${p.resim||''}','${p.category}',this.value)">
+          <div class="qBtn active" onclick="plus('${vid}','${p.ad} - ${renk1}',${p.fiyat},'${p.resim||''}','${p.category}')">+</div>
+          </div></div>`;
       }
       if(renk2){
         const vid=id+"__"+renk2;
         const vqty=cart[vid]?cart[vid].qty:0;
-        varyantHTML+='<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-top:1px solid var(--border);">'
-          +'<span style="font-size:11px;font-weight:700;color:var(--gray);letter-spacing:1px;">'+renk2+'</span>'
-          +'<div class="qtyControl">'
-          +'<div class="qBtn '+(vqty>0?'active':'')+'" onclick="minus(\''+vid+'\')">−</div>'
-          +'<input type="number" min="0" id="qnum-'+vid+'" value="'+vqty+'" class="qNum" onchange="setQty(\''+vid+'\',\''+p.ad+' - '+renk2+'\','+p.fiyat+',\''+(p.resim||"")+'\',\''+p.category+'\',this.value)">'
-          +'<div class="qBtn active" onclick="plus(\''+vid+'\',\''+p.ad+' - '+renk2+'\','+p.fiyat+',\''+(p.resim||"")+'\',\''+p.category+'\')">+</div>'
-          +'</div></div>';
+        varyantHTML+=`<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-top:1px solid var(--border);">
+          <span style="font-size:11px;font-weight:700;color:var(--gray);letter-spacing:1px;">${renk2}</span>
+          <div class="qtyControl">
+          <div class="qBtn ${vqty>0?'active':''}" onclick="minus('${vid}')">−</div>
+          <input type="number" min="0" id="qnum-${vid}" value="${vqty}" class="qNum" onchange="setQty('${vid}','${p.ad} - ${renk2}',${p.fiyat},'${p.resim||''}','${p.category}',this.value)">
+          <div class="qBtn active" onclick="plus('${vid}','${p.ad} - ${renk2}',${p.fiyat},'${p.resim||''}','${p.category}')">+</div>
+          </div></div>`;
       }
-      // Varyantlı ürün kartı (lazy loading eklendi)
-      return '<div class="productCard">'
-        +'<img class="productImg" src="'+img(p.resim, 'vitrin')+'" loading="lazy" onclick="openZoom(\''+img(p.resim, 'zoom')+'\')">'
-        +'<div class="productInfo">'
-        +'<div class="productName">'+p.ad+'</div>'
-        +'<div class="productCat">'+p.category+'</div>'
-        +'<div class="productPrice">'+p.fiyat+'₺</div>'
-        +varyantHTML
-        +'</div></div>';
+      return `<div class="productCard" data-category="${p.category}" style="display:${displayStyle}">
+        <img class="productImg" src="${img(p.resim, 'vitrin')}" loading="lazy" decoding="async" onclick="openZoom('${img(p.resim, 'zoom')}')">
+        <div class="productInfo">
+        <div class="productName">${p.ad}</div>
+        <div class="productCat">${p.category}</div>
+        <div class="productPrice">${p.fiyat}₺</div>
+        ${varyantHTML}
+        </div></div>`;
     } else {
       const qty=cart[id]?cart[id].qty:0;
-      // Normal ürün kartı (lazy loading eklendi)
-      return '<div class="productCard">'
-        +'<img class="productImg" src="'+img(p.resim, 'vitrin')+'" loading="lazy" onclick="openZoom(\''+img(p.resim, 'zoom')+'\')">'
-        +'<div class="productInfo">'
-        +'<div class="productName">'+p.ad+'</div>'
-        +'<div class="productCat">'+p.category+'</div>'
-        +'<div class="productBottom">'
-        +'<div class="productPrice">'+p.fiyat+'₺</div>'
-        +'<div class="qtyControl">'
-        +'<div class="qBtn '+(qty>0?'active':'')+'" onclick="minus(\''+id+'\')">−</div>'
-        +'<input type="number" min="0" id="qnum-'+id+'" value="'+qty+'" class="qNum" onchange="setQty(\''+id+'\',\''+p.ad+'\','+p.fiyat+',\''+(p.resim||"")+'\',\''+p.category+'\',this.value)">'
-        +'<div class="qBtn active" onclick="plus(\''+id+'\',\''+p.ad+'\','+p.fiyat+',\''+(p.resim||"")+'\',\''+p.category+'\')">+</div>'
-        +'</div></div></div></div>';
+      return `<div class="productCard" data-category="${p.category}" style="display:${displayStyle}">
+        <img class="productImg" src="${img(p.resim, 'vitrin')}" loading="lazy" decoding="async" onclick="openZoom('${img(p.resim, 'zoom')}')">
+        <div class="productInfo">
+        <div class="productName">${p.ad}</div>
+        <div class="productCat">${p.category}</div>
+        <div class="productBottom">
+        <div class="productPrice">${p.fiyat}₺</div>
+        <div class="qtyControl">
+        <div class="qBtn ${qty>0?'active':''}" onclick="minus('${id}')">−</div>
+        <input type="number" min="0" id="qnum-${id}" value="${qty}" class="qNum" onchange="setQty('${id}','${p.ad}',${p.fiyat},'${p.resim||''}','${p.category}',this.value)">
+        <div class="qBtn active" onclick="plus('${id}','${p.ad}',${p.fiyat},'${p.resim||''}','${p.category}')">+</div>
+        </div></div></div></div>`;
     }
   }).join("");
+
+  const emptyMsg = document.getElementById("emptyMsg");
+  if(activeCount === 0) emptyMsg.style.display = "block";
+  else emptyMsg.style.display = "none";
+}
+
+function updateQtyUI(id) {
+  let inputEl = document.getElementById("qnum-" + id);
+  if(inputEl) {
+    let qty = cart[id] ? cart[id].qty : 0;
+    inputEl.value = qty;
+    let minusBtn = inputEl.previousElementSibling;
+    if(qty > 0) minusBtn.classList.add("active");
+    else minusBtn.classList.remove("active");
+  }
 }
 
 function plus(id,ad,fiyat,resim,category){
   if(!cart[id]) cart[id]={id,ad,fiyat,resim,category,qty:0};
   cart[id].qty++;
-  saveCart(); updateCartUI(); renderGrid();
+  saveCart(); updateCartUI(); updateQtyUI(id); 
 }
 function minus(id){
   if(!cart[id]) return;
   cart[id].qty--;
   if(cart[id].qty<=0) delete cart[id];
-  saveCart(); updateCartUI(); renderGrid();
+  saveCart(); updateCartUI(); updateQtyUI(id);
 }
 function setQty(id,ad,fiyat,resim,category,val){
   const qty=parseInt(val)||0;
   if(qty<=0){ delete cart[id]; }
-else { if(!cart[id]) cart[id]={id,ad,fiyat,resim,category,qty:0}; cart[id].qty=qty; }
-  saveCart(); updateCartUI(); renderGrid();
+  else { if(!cart[id]) cart[id]={id,ad,fiyat,resim,category,qty:0}; cart[id].qty=qty; }
+  saveCart(); updateCartUI(); updateQtyUI(id);
 }
-function removeItem(id){ delete cart[id]; saveCart(); updateCartUI(); renderGrid(); renderCartItems(); }
+function removeItem(id){ 
+  delete cart[id]; 
+  saveCart(); updateCartUI(); updateQtyUI(id); renderCartItems(); 
+}
 
 function cartCount(){ return Object.values(cart).reduce((s,i)=>s+i.qty,0); }
 function cartTotal(){ return Object.values(cart).reduce((s,i)=>s+(i.qty*i.fiyat),0); }
@@ -495,7 +522,6 @@ function renderCartItems(){
   const items=Object.values(cart);
   const el=document.getElementById("cartItems");
   if(!items.length){ el.innerHTML='<div class="cartEmpty"><div>🛒</div>Sepetiniz boş</div>'; return; }
-  // Sepet görselleri için de lazy loading eklendi
   el.innerHTML=items.map(it=>'<div class="cartItem">'
     +'<img class="cartItemImg" src="'+img(it.resim, 'vitrin')+'" loading="lazy">'
     +'<div class="cartItemInfo">'
@@ -523,7 +549,7 @@ async function sendOrder(){
   });
   if(!valid){ alert("Lütfen tüm alanları doldurun!"); return; }
   const telClean=telefon.replace(/\D/g,"");
-  if(telClean.length<10){ document.getElementById("telefon").classList.add("error"); alert("Geçerli bir telefon numarası girin!"); return; }
+  if(telClean.length<10){ document.getElementById("telefon").classList.add("error"); alert("Geçerli bir telephone numarası girin!"); return; }
   sending=true;
   const btn=document.getElementById("sendBtn");
   btn.disabled=true; btn.innerText="Gönderiliyor...";
@@ -538,10 +564,14 @@ async function sendOrder(){
   document.getElementById("thankCode").innerText=orderId;
   document.getElementById("thankModal").classList.add("show");
   closeCart();
+  
+  items.forEach(p => { cart[p.id] = {qty: 0}; updateQtyUI(p.id); });
+  cart={}; saveCart(); 
+  
   setTimeout(()=>{ window.location.href="https://wa.me/905397932181?text="+encodeURIComponent(msg); },1500);
-  cart={}; saveCart(); sending=false; btn.disabled=false; btn.innerText="📦 Siparişi Gönder";
+  sending=false; btn.disabled=false; btn.innerText="📦 Siparişi Gönder";
   document.getElementById("isim").value=""; document.getElementById("telefon").value=""; document.getElementById("adres").value="";
-  renderGrid(); updateCartUI();
+  updateCartUI();
 }
 
 function closeThank(){ document.getElementById("thankModal").classList.remove("show"); }
@@ -559,7 +589,6 @@ document.addEventListener("DOMContentLoaded",()=>{
 
 loadCart();
 
-// Firebase'i anlık dinleme (Yoran setInterval yerine)
 db.collection("products").onSnapshot((snapshot) => {
   products = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   products = products.filter(p => p.aktif !== false);
