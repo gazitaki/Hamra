@@ -424,7 +424,7 @@ function renderGrid(){
           +'</div></div>';
       }
       return '<div class="productCard">'
-        +'<img class="productImg" src="'+img(p.resim)+'" onclick="openZoom(\''+img(p.resim)+'\')">'
+        +'<img class="productImg" loading="lazy" src="'+img(p.resim)+'" onclick="openZoom(\''+img(p.resim)+'\')">'
         +'<div class="productInfo">'
         +'<div class="productName">'+p.ad+'</div>'
         +'<div class="productCat">'+p.category+'</div>'
@@ -434,7 +434,7 @@ function renderGrid(){
     } else {
       const qty=cart[id]?cart[id].qty:0;
       return '<div class="productCard">'
-        +'<img class="productImg" src="'+img(p.resim)+'" onclick="openZoom(\''+img(p.resim)+'\')">'
+        +'<img class="productImg" loading="lazy" src="'+img(p.resim)+'" onclick="openZoom(\''+img(p.resim)+'\')">'
         +'<div class="productInfo">'
         +'<div class="productName">'+p.ad+'</div>'
         +'<div class="productCat">'+p.category+'</div>'
@@ -474,7 +474,7 @@ function cartTotal(){ return Object.values(cart).reduce((s,i)=>s+(i.qty*i.fiyat)
 function updateCartUI(){
   const count=cartCount(); const total=cartTotal();
   const badge=document.getElementById("cartBadge");
-  badge.innerText=count; badge.classList.toggle("hide",count===0);
+  badge.innerText=count; badge.classList.toggle("hide"
 document.getElementById("cartTotalPrice").innerText=total+"₺";
   const bar=document.getElementById("cartBar");
   document.getElementById("cartBarCount").innerText=count+" ürün";
