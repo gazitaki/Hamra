@@ -442,7 +442,7 @@ function renderGrid(){
           </div></div>`;
       }
       return `<div class="productCard" data-category="${p.category}" style="display:${displayStyle}">
-        <img class="productImg" src="${img(p.resim, 'vitrin')}" loading="lazy" decoding="async" onclick="openZoom('${img(p.resim, 'zoom')}')">
+        <img class="productImg" src="${img(p.resim, 'vitrin')}" onerror="this.onerror=null;this.src='https://via.placeholder.com/300?text=Hamra+Aksesuar';" loading="lazy" decoding="async" onclick="openZoom('${img(p.resim, 'zoom')}')">
         <div class="productInfo">
         <div class="productName">${p.ad}</div>
         <div class="productCat">${p.category}</div>
@@ -452,7 +452,7 @@ function renderGrid(){
     } else {
       const qty=cart[id]?cart[id].qty:0;
       return `<div class="productCard" data-category="${p.category}" style="display:${displayStyle}">
-        <img class="productImg" src="${img(p.resim, 'vitrin')}" loading="lazy" decoding="async" onclick="openZoom('${img(p.resim, 'zoom')}')">
+        <img class="productImg" src="${img(p.resim, 'vitrin')}" onerror="this.onerror=null;this.src='https://via.placeholder.com/300?text=Hamra+Aksesuar';" loading="lazy" decoding="async" onclick="openZoom('${img(p.resim, 'zoom')}')">
         <div class="productInfo">
         <div class="productName">${p.ad}</div>
         <div class="productCat">${p.category}</div>
@@ -523,7 +523,7 @@ function renderCartItems(){
   const el=document.getElementById("cartItems");
   if(!items.length){ el.innerHTML='<div class="cartEmpty"><div>🛒</div>Sepetiniz boş</div>'; return; }
   el.innerHTML=items.map(it=>'<div class="cartItem">'
-    +'<img class="cartItemImg" src="'+img(it.resim, 'vitrin')+'" loading="lazy">'
+    +'<img class="cartItemImg" src="'+img(it.resim, 'vitrin')+'" onerror="this.onerror=null;this.src=\'https://via.placeholder.com/300?text=Hamra+Aksesuar\';" loading="lazy">'
     +'<div class="cartItemInfo">'
     +'<div class="cartItemName">'+it.ad+'</div>'
     +'<div class="cartItemSub">'+it.qty+' adet × '+it.fiyat+'₺ = '+(it.qty*it.fiyat)+'₺</div>'
@@ -548,16 +548,21 @@ async function sendOrder(){
     if(!val){ el.classList.add("error"); valid=false; } else el.classList.remove("error");
   });
   if(!valid){ alert("Lütfen tüm alanları doldurun!"); return; }
-  const telClean=telefon.replace(/\D/g,"");
-  if(telClean.length<10){ document.getElementById("telefon").classList.add("error"); alert("Geçerli bir telephone numarası girin!"); return; }
+  
+  // 🚀 TELEFON FORMATI TEMİZLEYİCİ (Adım 1)
+  let telClean=telefon.replace(/\D/g,"");
+  if(telClean.startsWith("90")) telClean = telClean.substring(2);
+  if(!telClean.startsWith("0") && telClean.length === 10) telClean = "0" + telClean;
+  if(telClean.length !== 11){ document.getElementById("telefon").classList.add("error"); alert("Geçerli bir telefon numarası girin (Örn: 05xx xxx xx xx)!"); return; }
+  
   sending=true;
   const btn=document.getElementById("sendBtn");
   btn.disabled=true; btn.innerText="Gönderiliyor...";
   const orderId="ORD-"+Date.now().toString().slice(-5);
   try{
-    await db.collection("orders").add({ id:orderId, date:new Date().toISOString(), status:"yeni", customer:{isim,telefon,adres}, items });
+    await db.collection("orders").add({ id:orderId, date:new Date().toISOString(), status:"yeni", customer:{isim,telefon:telClean,adres}, items });
   }catch(e){ alert("Hata oluştu, tekrar deneyin."); sending=false; btn.disabled=false; btn.innerText="📦 Siparişi Gönder"; return; }
-  let msg="🧾 SİPARİŞ NO: "+orderId+"\n\n👤 "+isim+"\n📞 "+telefon+"\n📍 "+adres+"\n\n";
+  let msg="🧾 SİPARİŞ NO: "+orderId+"\n\n👤 "+isim+"\n📞 "+telClean+"\n📍 "+adres+"\n\n";
   let totalPrice=0;
   items.forEach(p=>{ totalPrice+=p.qty*p.fiyat; msg+="• "+p.ad+" - "+p.qty+" adet - "+(p.qty*p.fiyat)+"₺\n"; });
   msg+="\n💰 TOPLAM: "+totalPrice+"₺";
@@ -574,7 +579,11 @@ async function sendOrder(){
   updateCartUI();
 }
 
-function closeThank(){ document.getElementById("thankModal").classList.remove("show"); }
+// 🚀 SİPARİŞ SONRASI TEMİZ SAYFA YENİLEME (Adım 3)
+function closeThank(){ 
+  document.getElementById("thankModal").classList.remove("show"); 
+  window.location.reload();
+}
 
 let zScale=1, zStartDist=0, zLastScale=1;
 function openZoom(src){ const el=document.getElementById("zoomImg"); el.src=src; zScale=1; el.style.transform="scale(1)"; document.getElementById("zoomModal").classList.add("show"); document.body.style.overflow="hidden"; }
