@@ -59,6 +59,21 @@ button{ cursor:pointer; font-weight:bold; }
 .zoomModal.show{ display:flex; }
 .zoomModal img{ max-width:95vw; max-height:95vh; object-fit:contain; border-radius:10px; }
 .zoomClose{ position:absolute; top:14px; right:14px; width:38px; height:38px; background:white; color:#111; border:none; border-radius:50%; font-size:22px; font-weight:900; cursor:pointer; display:flex; align-items:center; justify-content:center; z-index:1000; }
+.fisModal{ display:none; position:fixed; inset:0; background:white; z-index:998; overflow-y:auto; }
+.fisModal.show{ display:block; }
+.fisHeader{ background:#8b1a2f; color:white; padding:14px 16px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:10; }
+.fisHeaderTitle{ font-size:16px; font-weight:bold; }
+.fisClose{ background:rgba(255,255,255,.2); color:white; border:none; border-radius:8px; padding:8px 14px; font-size:13px; font-weight:bold; cursor:pointer; }
+.fisBody{ padding:16px; }
+.fisUrunRow{ display:flex; gap:12px; align-items:center; padding:10px; background:#fdf0f2; border-radius:12px; margin-bottom:10px; border:1px solid #f0cdd2; }
+.fisUrunImg{ width:80px; height:80px; object-fit:cover; border-radius:8px; background:#fae4e7; flex-shrink:0; cursor:pointer; }
+.fisUrunInfo{ flex:1; }
+.fisUrunAd{ font-size:14px; font-weight:bold; color:#2c1015; margin-bottom:4px; }
+.fisUrunAdet{ font-size:22px; font-weight:900; color:#8b1a2f; background:#fae4e7; padding:4px 12px; border-radius:8px; display:inline-block; }
+.fisUrunFiyat{ font-size:13px; color:#9e7070; margin-top:4px; }
+.fisToplam{ background:#8b1a2f; color:white; padding:14px 16px; border-radius:12px; display:flex; justify-content:space-between; align-items:center; margin-top:12px; }
+.fisToplam span:first-child{ font-size:13px; color:rgba(255,255,255,.7); }
+.fisToplam span:last-child{ font-size:22px; font-weight:900; color:white; }
 
 .orderCard{ background:#222; margin-bottom:8px; border-radius:12px; overflow:hidden; border:1px solid #333; }
 .orderHeader{ padding:12px; cursor:pointer; display:flex; justify-content:space-between; align-items:center; user-select:none; }
@@ -79,6 +94,14 @@ button{ cursor:pointer; font-weight:bold; }
 <div class="zoomModal" id="zoomModal" onclick="closeZoom()">
   <button class="zoomClose" onclick="closeZoom()">×</button>
   <img id="zoomImg" onclick="event.stopPropagation()">
+</div>
+
+<div class="fisModal" id="fisModal">
+  <div class="fisHeader">
+    <div class="fisHeaderTitle" id="fisTitle">📦 Sipariş Fişi</div>
+    <button class="fisClose" onclick="closeFis()">✕ Kapat</button>
+  </div>
+  <div class="fisBody" id="fisBody"></div>
 </div>
 
 <div id="loginPage" class="card">
@@ -130,6 +153,16 @@ button{ cursor:pointer; font-weight:bold; }
   <div class="bolumBaslik" style="border-left-color:#8b1a2f" onclick="goBolum('arsiv')">📁 Arşiv <span class="countBadge" id="count-arsiv">0</span></div>
   <div class="bolumIcerik" id="body-arsiv"></div>
 
+  <div class="bolumBaslik" style="border-left-color:#6c5ce7" onclick="goBolum('kategoriYonetim')">🛠 Kategorileri Yönet <span class="countBadge" id="count-kategoriList">0</span></div>
+  <div class="bolumIcerik" id="body-kategoriYonetim">
+    <div class="card">
+      <h3>📁 Yeni Kategori Ekle</h3>
+      <input id="yeniKategoriAd" placeholder="Kategori adı (Örn: Yüzük)">
+      <button class="primary" onclick="addCategory()">➕ KATEGORİ EKLE</button>
+      <div id="adminCategoryList" style="margin-top:12px;"></div>
+    </div>
+  </div>
+
   <div class="card">
     <h3>📦 Ürün Ekle</h3>
     <input id="ad" placeholder="Ürün adı">
@@ -137,20 +170,15 @@ button{ cursor:pointer; font-weight:bold; }
     <input id="resim" placeholder="Resim link">
     <input id="renk1" placeholder="1. Renk adı (örn: Gold) - opsiyonel">
     <input id="renk2" placeholder="2. Renk adı (örn: Gümüş) - opsiyonel">
-    <select id="kategori">
-      <option value="Xuping">Xuping</option>
-      <option value="CM">CM</option>
-      <option value="Set">Set</option>
-      <option value="Küpe">Küpe</option>
-      <option value="Kolye">Kolye</option>
-      <option value="Bileklik">Bileklik</option>
-      <option value="VIP">VIP</option>
-    </select>
+    <select id="kategori"><option value="">Kategoriler Yükleniyor...</option></select>
     <button class="primary" onclick="addProduct()">➕ EKLE</button>
   </div>
 
   <div class="bolumBaslik" style="border-left-color:#0984e3" onclick="goBolum('urunler')">📦 Ürün Listesi <span class="countBadge" id="count-urunler">0</span></div>
   <div class="bolumIcerik" id="body-urunler">
+    <select id="urunKatFilter" style="margin-bottom:10px;" onchange="render()">
+      <option value="">Tüm Kategoriler</option>
+    </select>
     <div id="products"></div>
   </div>
 </div>
@@ -194,7 +222,14 @@ function loginAdmin(){
 
 function logoutAdmin(){ auth.signOut(); }
 
+let categories = [];
+
 function startListeners(){
+  db.collection("categories").orderBy("createdAt","asc").onSnapshot(function(snap){
+    categories = snap.docs.map(function(d){ return Object.assign({ id: d.id }, d.data()); });
+    updateCategorySelects();
+    render();
+  });
   db.collection("products").onSnapshot(function(snap){
     products = snap.docs.map(function(d){ return Object.assign({ id: d.id }, d.data()); });
     render();
@@ -203,6 +238,74 @@ function startListeners(){
     allOrders = snap.docs.map(function(d){ return Object.assign({ _docId: d.id }, d.data()); });
     render();
   });
+}
+
+function updateCategorySelects(){
+  var select = document.getElementById("kategori");
+  var filterSelect = document.getElementById("urunKatFilter");
+  if(!select) return;
+  if(categories.length === 0){
+    select.innerHTML = '<option value="">Önce Kategori Ekleyin</option>';
+  } else {
+    select.innerHTML = categories.map(function(c){ return '<option value="'+c.name+'">'+c.name+'</option>'; }).join("");
+  }
+  if(filterSelect){
+    var current = filterSelect.value;
+    filterSelect.innerHTML = '<option value="">Tüm Kategoriler</option>'
+      + categories.map(function(c){ return '<option value="'+c.name+'">'+c.name+'</option>'; }).join("");
+    filterSelect.value = current;
+  }
+}
+
+function addCategory(){
+  var input = document.getElementById("yeniKategoriAd");
+  var nameV = input.value.trim();
+  if(!nameV){ alert("Lütfen bir kategori adı girin!"); return; }
+  db.collection("categories").add({ name: nameV, createdAt: Date.now() }).then(function(){ input.value=""; }).catch(function(e){ alert("Hata: "+e.message); });
+}
+
+function deleteCategory(id){
+  if(confirm("Bu kategoriyi silmek istediğinize emin misiniz?")){
+    db.collection("categories").doc(id).delete().catch(function(e){ alert("Hata: "+e.message); });
+  }
+}
+
+function closeFis(){
+  document.getElementById("fisModal").classList.remove("show");
+  document.body.style.overflow="";
+}
+
+function openFis(docId){
+  var o = allOrders.find(function(x){ return x._docId===docId; });
+  if(!o) return;
+  var total = calcTotal(o);
+  var isim = o.customer&&o.customer.isim?o.customer.isim:"";
+  var telefon = o.customer&&o.customer.telefon?o.customer.telefon:"";
+  var adres = o.customer&&o.customer.adres?o.customer.adres:"";
+  var DEFAULT = "https://via.placeholder.com/150";
+
+  document.getElementById("fisTitle").innerText = "📦 "+(o.id||"")+" — "+isim;
+
+  var bodyHtml = '<div style="background:#fdf0f2;border-radius:10px;padding:12px;margin-bottom:14px;font-size:13px;border:1px solid #f0cdd2;">'
+    +'<div><b>👤 '+isim+'</b></div>'
+    +'<div style="color:#9e7070;margin-top:4px;">📞 '+telefon+'</div>'
+    +'<div style="color:#9e7070;margin-top:4px;">📍 '+adres+'</div>'
+    +'</div>';
+
+  if(o.items) o.items.forEach(function(it){
+    var src = it.resim || DEFAULT;
+    bodyHtml += '<div class="fisUrunRow">'
+      +'<img class="fisUrunImg" src="'+src+'" onerror="this.src=\''+DEFAULT+'\'" onclick="openZoom(\''+src.replace(/'/g,"\\'")+'\')"><div class="fisUrunInfo">'
+      +'<div class="fisUrunAd">'+it.ad+'</div>'
+      +'<div class="fisUrunAdet">'+it.qty+' adet</div>'
+      +'<div class="fisUrunFiyat">'+it.fiyat+'₺ x '+it.qty+' = '+(it.qty*it.fiyat)+'₺</div>'
+      +'</div></div>';
+  });
+
+  bodyHtml += '<div class="fisToplam"><span>TOPLAM TUTAR</span><span>'+total+'₺</span></div>';
+  document.getElementById("fisBody").innerHTML = bodyHtml;
+  document.getElementById("fisModal").classList.add("show");
+  document.body.style.overflow="hidden";
 }
 
 function openZoom(src){ document.getElementById("zoomImg").src=src; document.getElementById("zoomModal").classList.add("show"); document.body.style.overflow="hidden"; }
@@ -237,7 +340,7 @@ function setFilter(key,label,el){
 document.addEventListener("click",function(){ var fp=document.getElementById("filterPanel"); if(fp) fp.classList.remove("show"); });
 
 function goBolum(key){
-  ["yeni","odeme","kargo","iptal","arsiv","urunler"].forEach(function(k){
+  ["yeni","odeme","kargo","iptal","arsiv","urunler","kategoriYonetim"].forEach(function(k){
     document.getElementById("body-"+k).classList.toggle("show",k===key);
   });
 }
@@ -282,6 +385,16 @@ function deleteProduct(idx){
   if(confirm("Silinsin mi?")) db.collection("products").doc(p.id).delete();
 }
 
+function toggleProductById(id){
+  var p=products.find(function(x){ return x.id===id; });
+  if(!p) return;
+  db.collection("products").doc(id).update({ aktif:!(p.aktif!==false) });
+}
+
+function deleteProductById(id){
+  if(confirm("Silinsin mi?")) db.collection("products").doc(id).delete();
+}
+
 function silSiparis(docId){
   if(confirm("Silinsin mi?")) db.collection("orders").doc(docId).delete();
 }
@@ -299,15 +412,6 @@ function iptalEt(docId){
   if(confirm("İptal edilsin mi?")){
     db.collection("orders").doc(docId).update({ status:"iptal", iptalTarihi:new Date().toLocaleDateString("tr-TR") });
   }
-}
-
-function printOrder(docId){
-  var o=allOrders.find(function(x){ return x._docId===docId; }); if(!o) return;
-  var win=window.open("","_blank");
-  var html="<h2>HAMRA AKSESUAR SİPARİŞ</h2><hr>Müşteri: "+(o.customer&&o.customer.isim?o.customer.isim:"")+"<br>Tel: "+(o.customer&&o.customer.telefon?o.customer.telefon:"")+"<br>Adres: "+(o.customer&&o.customer.adres?o.customer.adres:"")+"<br><hr>";
-  if(o.items) o.items.forEach(function(it){ html+="<div>"+it.ad+" - "+it.qty+" Adet - "+it.fiyat+"₺</div>"; });
-  html+="<hr><h3>Toplam: "+calcTotal(o)+"₺</h3><script>window.print();<\/script>";
-  win.document.write(html); win.document.close();
 }
 
 function toggleOrder(docId){
@@ -357,7 +461,7 @@ function buildCard(order){
 
   html+='<hr style="border-color:#333;margin:8px 0;"><b>💰 TOPLAM: '+total+'₺</b>';
   html+=nextBtn+waBtn;
-  html+='<button onclick="printOrder(\''+docId+'\')" style="margin-top:6px;background:#444;color:white;">🖨 Yazdır</button>';
+  html+='<button onclick="openFis(\''+docId+'\')" style="margin-top:6px;background:#8b1a2f;color:white;width:100%;padding:10px;border:none;border-radius:8px;font-size:13px;font-weight:bold;cursor:pointer;">📋 Sipariş Fişi</button>';
   html+='<button class="iptalBtn" onclick="iptalEt(\''+docId+'\')">❌ İptal Et</button>';
   html+='<button onclick="silSiparis(\''+docId+'\')" style="margin-top:6px;background:#2d3436;color:#ff7675;border:1px solid #ff7675;border-radius:8px;padding:10px;width:100%;font-size:13px;font-weight:bold;cursor:pointer;">🗑 Siparişi Sil</button>';
   html+='</div></div>';
@@ -367,21 +471,35 @@ function buildCard(order){
 function render(){
   document.getElementById("totalProducts").innerText=products.length;
   document.getElementById("count-urunler").innerText=products.length;
+  document.getElementById("count-kategoriList").innerText=categories.length;
   document.getElementById("totalMoney").innerText=calcMoney()+"₺";
+
+  var catHtml="";
+  categories.forEach(function(c){
+    catHtml+='<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:#1a1a1a;border-radius:8px;margin-bottom:6px;">'
+      +'<span>📁 '+c.name+'</span>'
+      +'<button onclick="deleteCategory(\''+c.id+'\')" style="background:#d63031;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:bold;cursor:pointer;">🗑 Sil</button>'
+      +'</div>';
+  });
+  document.getElementById("adminCategoryList").innerHTML = catHtml || "<p style='color:#666;font-size:12px;'>Henüz kategori yok.</p>";
 
   var key=document.getElementById("searchOrder").value.toLowerCase();
 
+  var katFilter = document.getElementById("urunKatFilter") ? document.getElementById("urunKatFilter").value : "";
+  var filteredProducts = katFilter ? products.filter(function(x){ return x.category === katFilter; }) : products;
+  document.getElementById("count-urunler").innerText = filteredProducts.length;
   var p="";
-  products.forEach(function(x,i){
+  filteredProducts.forEach(function(x){
     var isAktif=x.aktif!==false;
     var src=x.resim||"https://via.placeholder.com/150";
     p+='<div class="card" style="padding:8px;">';
     p+='<img class="productImage '+(isAktif?'':'pasif-img')+'" src="'+src+'" onclick="openZoom(\''+src.replace(/'/g,"\\'")+'\')">'; 
     p+='<div style="margin-top:5px;font-weight:bold;font-size:12px;">'+x.ad+'</div>';
+    p+='<div style="color:#aaa;font-size:11px;margin-bottom:2px;">📁 '+(x.category||'Kategorisiz')+'</div>';
     p+='<div style="color:#c4848e;font-weight:bold;">'+x.fiyat+'₺</div>';
-    p+='<button class="'+(isAktif?'primary':'passiveBtn')+'" onclick="toggleProductStatus('+i+')">'+(isAktif?'🟢 Aktif':'🔴 Pasif')+'</button>';
-    p+='<button class="deleteBtn" onclick="deleteProduct('+i+')">🗑 Sil</button>';
-  p+='</div>';
+    p+='<button class="'+(isAktif?'primary':'passiveBtn')+'" onclick="toggleProductById(\''+x.id+'\')">'+(isAktif?'🟢 Aktif':'🔴 Pasif')+'</button>';
+    p+='<button class="deleteBtn" onclick="deleteProductById(\''+x.id+'\')">🗑 Sil</button>';
+    p+='</div>';
   });
   document.getElementById("products").innerHTML=p;
 
