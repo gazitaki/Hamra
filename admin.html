@@ -167,11 +167,15 @@ button{ cursor:pointer; font-weight:bold; }
     <h3>📦 Ürün Ekle</h3>
     <input id="ad" placeholder="Ürün adı">
     <input id="fiyat" type="number" placeholder="Fiyat">
-    <input id="resim" placeholder="Resim link">
     <input id="renk1" placeholder="1. Renk adı (örn: Gold) - opsiyonel">
     <input id="renk2" placeholder="2. Renk adı (örn: Gümüş) - opsiyonel">
     <select id="kategori"><option value="">Kategoriler Yükleniyor...</option></select>
-    <button class="primary" onclick="addProduct()">➕ EKLE</button>
+    <textarea id="resimler" placeholder="Resim linklerini alt alta yapıştır (her satır ayrı ürün olur)" style="width:100%;padding:10px;margin-top:6px;border:none;border-radius:8px;font-size:13px;background:#2a2a2a;color:white;min-height:100px;resize:vertical;box-sizing:border-box;"></textarea>
+    <div style="display:flex;gap:8px;margin-top:6px;">
+      <button class="primary" onclick="addProduct()" style="flex:1;">➕ EKLE</button>
+      <button onclick="temizleForm()" style="background:#636e72;color:white;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:bold;cursor:pointer;flex:1;">🧹 Temizle</button>
+    </div>
+    <div id="eklemeSonuc" style="margin-top:8px;font-size:12px;color:#c4848e;display:none;"></div>
   </div>
 
   <div class="bolumBaslik" style="border-left-color:#0984e3" onclick="goBolum('urunler')">📦 Ürün Listesi <span class="countBadge" id="count-urunler">0</span></div>
@@ -359,20 +363,47 @@ function waLink(tel,msg){
 function addProduct(){
   var adV=document.getElementById("ad").value.trim();
   var fiyatV=document.getElementById("fiyat").value.trim();
-  var resimV=document.getElementById("resim").value.trim();
   var katV=document.getElementById("kategori").value;
   var renk1V=document.getElementById("renk1").value.trim();
   var renk2V=document.getElementById("renk2").value.trim();
-  if(!adV||!fiyatV){ alert("Ad ve Fiyat giriniz!"); return; }
-  var data={ ad:adV, fiyat:parseFloat(fiyatV), resim:resimV, category:katV, aktif:true };
-  if(renk1V) data.renk1=renk1V;
-  if(renk2V) data.renk2=renk2V;
-  db.collection("products").add(data);
+  var resimlerV=document.getElementById("resimler").value.trim();
+
+  if(!adV||!fiyatV||!katV){ alert("Ad, Fiyat ve Kategori seçimi zorunludur!"); return; }
+
+  var linkler=resimlerV.split("\n").map(function(l){ return l.trim(); }).filter(function(l){ return l.length>0; });
+  if(linkler.length===0) linkler=[""];
+
+  var sonuc=document.getElementById("eklemeSonuc");
+  var batch=db.batch();
+
+  linkler.forEach(function(resim){
+    var data={ ad:adV, fiyat:parseFloat(fiyatV), resim:resim, category:katV, aktif:true };
+    if(renk1V) data.renk1=renk1V;
+    if(renk2V) data.renk2=renk2V;
+    var ref=db.collection("products").doc();
+    batch.set(ref,data);
+  });
+
+  batch.commit().then(function(){
+    sonuc.style.display="block";
+    sonuc.innerText="✅ "+linkler.length+" ürün eklendi!";
+    document.getElementById("resimler").value="";
+    setTimeout(function(){ sonuc.style.display="none"; },3000);
+  }).catch(function(e){ alert("Hata: "+e.message); });
+}
+
+function temizleForm(){
   document.getElementById("ad").value="";
   document.getElementById("fiyat").value="";
-  document.getElementById("resim").value="";
   document.getElementById("renk1").value="";
   document.getElementById("renk2").value="";
+  document.getElementById("resimler").value="";
+  document.getElementById("kategori").selectedIndex=0;
+  var sonuc=document.getElementById("eklemeSonuc");
+  sonuc.style.display="block";
+  sonuc.style.color="#f0cdd2";
+  sonuc.innerText="🧹 Form temizlendi!";
+  setTimeout(function(){ sonuc.style.display="none"; sonuc.style.color="#c4848e"; },2000);
 }
 
 function toggleProductStatus(idx){
